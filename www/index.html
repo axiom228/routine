@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Routine</title>
+<style>
+:root{--bg:#f3f5f1;--card:#fff;--ink:#1d2b24;--mut:#6b7a72;--line:#dfe5df;--acc:#0f766e;--acc2:#e8f3f1;--warn:#b45309;--warnbg:#fdf1de;--bad:#b42318}
+@media(prefers-color-scheme:dark){:root{--bg:#121a17;--card:#1a2420;--ink:#e6efe9;--mut:#8fa196;--line:#2a3832;--acc:#3dbdaf;--acc2:#1c322f;--warn:#f0b45a;--warnbg:#33281a;--bad:#f27d72}}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 "Noto Sans Bengali","Hind Siliguri",system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+main{flex:1;overflow:auto;padding:14px 14px 90px;max-width:640px;width:100%;margin:0 auto}
+h1{font-size:22px;margin-bottom:2px}
+h2{font-size:15px;color:var(--mut);margin:18px 0 8px;font-weight:600}
+.sub{color:var(--mut);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px}
+input,textarea{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:8px}
+textarea{min-height:64px;resize:vertical}
+.row{display:flex;gap:8px}.row>*{flex:1}
+button{font:inherit;border:0;border-radius:8px;padding:9px 14px;background:var(--acc);color:#fff;font-weight:600}
+button.g{background:var(--acc2);color:var(--acc)}
+button.x{background:none;color:var(--bad);padding:4px 8px}
+.item{display:flex;align-items:flex-start;gap:10px}
+.item .b{flex:1;min-width:0}
+.item .t{font-weight:600;word-break:break-word}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:20px;background:var(--acc2);color:var(--acc);margin-right:4px}
+.tag.late{background:var(--warnbg);color:var(--warn)}
+.chk{width:22px;height:22px;margin:2px 0 0;accent-color:var(--acc)}
+.done .t{text-decoration:line-through;color:var(--mut)}
+.empty{color:var(--mut);font-size:14px;padding:8px 2px}
+.plan{background:var(--acc2);border-color:transparent}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0)}
+nav button{flex:1;background:none;color:var(--mut);border-radius:0;padding:12px 4px;font-size:14px}
+nav button.on{color:var(--acc);box-shadow:inset 0 2px 0 var(--acc)}
+nav i{font-style:normal;background:var(--bad);color:#fff;border-radius:10px;font-size:11px;padding:0 6px;margin-left:4px}
+.bar{height:8px;border-radius:6px;background:var(--line);overflow:hidden}.bar b{display:block;height:100%;background:var(--acc)}
+.stats{display:flex;gap:8px}.stats .card{flex:1;text-align:center;margin:0}.stats strong{font-size:26px;display:block;line-height:1.2}
+.cols{display:flex;gap:6px;align-items:flex-end;height:70px}.cols div{flex:1;text-align:center;font-size:11px;color:var(--mut)}.cols span{display:block;background:var(--acc);border-radius:4px 4px 0 0;min-height:2px}
+.days{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.days label{display:flex;align-items:center;gap:4px;font-size:14px;background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:4px 10px}.days input{width:auto;margin:0;accent-color:var(--acc)}
+#toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:9;max-width:90%}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<main id="app"></main>
+<nav id="nav"></nav>
+<script>
+const REV_HOUR=8; // revision notification time (সকাল ৮টা)
+const REV_GAPS=[4,7]; // কত দিন পর revise
+const K='routine_v1';
+let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+S=S||{n:1,logs:[],plans:{},tasks:[]};S.rep=S.rep||[];
+const DN=['রবি','সোম','মঙ্গল','বুধ','বৃহ','শুক্র','শনি'];
+let tab='today';
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>fmt(new Date());
+const addDays=(s,n)=>{const[y,m,d]=s.split('-').map(Number);return fmt(new Date(y,m-1,d+n))};
+const atTime=(s,h,mi)=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,h,mi||0).getTime()};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const bn=s=>String(s).replace(/\d/g,d=>'০১২৩৪৫৬৭৮৯'[d]);
+const nice=s=>{const[y,m,d]=s.split('-').map(Number);return bn(new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}))};
+function save(){localStorage.setItem(K,JSON.stringify(S));sync();render()}
+
+// Repeat কাজ: আগামী ৭ দিনের instance বানায়; app না খুললে মাঝের দিনগুলোও বানায় (না করা হিসেবে)
+function genRep(){const hz=addDays(today(),7);
+ S.rep.forEach(r=>{let d=r.last?addDays(r.last,1):r.start;
+  while(d<=hz){const[y,m,dd]=d.split('-').map(Number);
+   if(r.days.includes(new Date(y,m-1,dd).getDay()))S.tasks.push({id:S.n++,title:r.title,date:d,time:r.time||'',done:false,rid:r.id});
+   d=addDays(d,1)}
+  r.last=hz})}
+// সব revision ও task এক তালিকায়
+function revs(){const r=[];S.logs.forEach(l=>REV_GAPS.forEach((g,i)=>{r.push({log:l,gap:g,i,due:addDays(l.date,g),done:!!(l.done&&l.done[i]),at:l.doneAt&&l.doneAt[i]})}));return r}
+function alerts(){const a=[];
+ revs().forEach(r=>{if(!r.done)a.push({nid:r.log.id*10+r.i+1,title:'Revise: '+r.log.topic,body:bn(r.gap)+' দিন আগে পড়েছিলে',at:atTime(r.due,REV_HOUR)})});
+ S.tasks.forEach(t=>{if(!t.done)a.push({nid:t.id*10+5,title:'Task: '+t.title,body:'এখন করার সময়',at:atTime(t.date,...(t.time||'09:00').split(':').map(Number))})});
+ return a}
+
+// Notification: APK (Capacitor) হলে native schedule, নাহলে browser fallback
+const LN=()=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications;
+async function sync(){const ln=LN();if(!ln)return;try{
+ const p=await ln.getPending();if(p.notifications.length)await ln.cancel({notifications:p.notifications.map(n=>({id:n.id}))});
+ const list=alerts().filter(a=>a.at>Date.now()).sort((a,b)=>a.at-b.at).slice(0,60).map(a=>({id:a.nid,title:a.title,body:a.body,schedule:{at:new Date(a.at),allowWhileIdle:true}}));
+ if(list.length)await ln.schedule({notifications:list})}catch(e){}}
+let nativeOk=true;
+if(LN())LN().checkPermissions().then(r=>{nativeOk=r.display==='granted';render();if(!nativeOk)askPerm()}).catch(()=>{});
+async function askPerm(){const ln=LN();
+ if(ln){try{const r=await ln.requestPermissions();nativeOk=r.display==='granted';await sync()}catch(e){}}
+ else if('Notification' in window){await Notification.requestPermission()}
+ render()}
+function permOk(){const ln=LN();if(ln)return nativeOk;return !('Notification' in window)||Notification.permission==='granted'}
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',5000)}
+const fired=()=>{try{return JSON.parse(localStorage.getItem(K+'_f'))||{}}catch(e){return{}}};
+function tick(){if(LN())return;const f=fired(),now=Date.now();let ch=false;
+ alerts().forEach(a=>{if(a.at<=now&&a.at>now-864e5&&!f[a.nid+'_'+a.at]){f[a.nid+'_'+a.at]=1;ch=true;
+  if('Notification' in window&&Notification.permission==='granted')try{new Notification(a.title,{body:a.body})}catch(e){}
+  toast(a.title)}});
+ if(ch)localStorage.setItem(K+'_f',JSON.stringify(f))}
+setInterval(tick,15000);
+
+// ---------- Render ----------
+function dueNow(){return revs().filter(r=>!r.done&&r.due<=today())}
+function render(){
+ const d=dueNow().length,tk=S.tasks.filter(t=>!t.done&&t.date<=today()).length;
+ $('#nav').innerHTML=[['today','আজ'],['rev','Revise',d],['task','Tasks',tk],['hist','History']].map(([k,l,c])=>`<button class="${tab===k?'on':''}" data-tab="${k}">${l}${c?`<i>${bn(c)}</i>`:''}</button>`).join('');
+ $('#app').innerHTML={today:vToday,rev:vRev,task:vTask,hist:vHist}[tab]();
+}
+function perm(){return permOk()?'':`<div class="card"><div class="sub" style="margin-bottom:8px">Reminder পেতে notification permission দাও</div><button data-act="perm">🔔 Notification চালু করো</button></div>`}
+const trow=k=>`<div class="card item ${k.done?'done':''}"><input type="checkbox" class="chk" ${k.done?'checked':''} data-act="taskdone" data-id="${k.id}"><div class="b"><div class="t">${k.rid?'🔁 ':''}${esc(k.title)}</div><div class="sub"><span class="tag ${!k.done&&k.date<today()?'late':''}">${nice(k.date)}</span>${bn(k.time||'')}</div></div><button class="x" data-act="deltask" data-id="${k.id}">✕</button></div>`;
+function vToday(){const t=today(),tm=addDays(t,1),logs=S.logs.filter(l=>l.date===t);
+ return `<h1>আজ, ${nice(t)}</h1><div class="sub">যা পড়বে লিখে রাখো, ${bn(REV_GAPS[0])} ও ${bn(REV_GAPS[1])} দিন পর reminder আসবে</div>
+ ${perm()}
+ ${S.plans[t]?`<h2>আজকের plan</h2><div class="card plan">${esc(S.plans[t]).replace(/\n/g,'<br>')}</div>`:''}
+ <h2>আজকের কাজ</h2>
+ <div class="card"><div class="row"><input id="qtask" placeholder="যেকোনো কাজ লেখো" style="margin:0;flex:3"><button data-act="qadd" style="flex:1">যোগ</button></div></div>
+ ${(()=>{const l=S.tasks.filter(k=>k.date<=t&&(!k.done||k.date===t)).sort((a,b)=>(a.done-b.done)||((a.date+a.time)<(b.date+b.time)?-1:1));return l.length?l.map(trow).join(''):'<div class="empty">আজ কোনো কাজ নেই</div>'})()}
+ <h2>আজ কী পড়লাম</h2>
+ <div class="card"><input id="topic" placeholder="Subject / chapter / topic"><textarea id="note" placeholder="নোট (ঐচ্ছিক)"></textarea><button data-act="addlog">যোগ করো</button></div>
+ ${logs.length?logs.map(l=>`<div class="card item"><div class="b"><div class="t">${esc(l.topic)}</div>${l.note?`<div class="sub">${esc(l.note)}</div>`:''}<div class="sub">Revise: ${REV_GAPS.map(g=>nice(addDays(l.date,g))).join(', ')}</div></div><button class="x" data-act="dellog" data-id="${l.id}">✕</button></div>`).join(''):'<div class="empty">আজ এখনো কিছু যোগ করোনি</div>'}
+ <h2>কাল কী পড়ব (${nice(tm)})</h2>
+ <div class="card"><textarea id="plan" placeholder="কালকের plan">${esc(S.plans[tm]||'')}</textarea><button class="g" data-act="saveplan">Save</button></div>`}
+function vRev(){const t=today(),all=revs().filter(r=>!r.done).sort((a,b)=>a.due<b.due?-1:1);
+ const row=r=>`<div class="card item"><input type="checkbox" class="chk" data-act="revdone" data-id="${r.log.id}" data-i="${r.i}" ${r.due>t?'disabled':''}><div class="b"><div class="t">${esc(r.log.topic)}</div><div class="sub"><span class="tag ${r.due<t?'late':''}">${bn(r.gap)} দিন</span>${r.due<t?'দেরি, ':''}${nice(r.due)} · পড়েছিলে ${nice(r.log.date)}${r.due>t?' · ওই দিন tick করা যাবে':''}</div></div></div>`;
+ const now=all.filter(r=>r.due<=t),up=all.filter(r=>r.due>t);
+ return `<h1>Revise</h1>${perm()}<h2>এখন করার</h2>${now.length?now.map(row).join(''):'<div class="empty">কিছু বাকি নেই 🎉</div>'}<h2>আসছে</h2>${up.length?up.map(row).join(''):'<div class="empty">কিছু নেই</div>'}`}
+function vTask(){const t=today(),ts=[...S.tasks].sort((a,b)=>(a.done-b.done)||((a.date+a.time)<(b.date+b.time)?-1:1));
+ return `<h1>Tasks</h1>${perm()}
+ <div class="card"><input id="ttitle" placeholder="কী করতে হবে"><div class="row"><input id="tdate" type="date" value="${t}"><input id="ttime" type="time" value=""></div><button data-act="addtask">যোগ করো</button></div>
+ <h2>নিয়মিত কাজ (repeat)</h2>
+ <div class="card"><input id="rtitle" placeholder="যেমন: ব্যায়াম, নামাজ, English পড়া"><input id="rtime" type="time"><div class="days">${DN.map((n,i)=>`<label><input type="checkbox" class="rd" value="${i}" checked>${n}</label>`).join('')}</div><button data-act="addrep">Repeat কাজ যোগ করো</button></div>
+ ${S.rep.map(r=>`<div class="card item"><div class="b"><div class="t">🔁 ${esc(r.title)}</div><div class="sub">${r.days.length===7?'প্রতিদিন':r.days.map(d=>DN[d]).join(', ')}${r.time?' · '+bn(r.time):''}</div></div><button class="x" data-act="delrep" data-id="${r.id}">✕</button></div>`).join('')}
+ <h2>সব কাজ</h2>
+ ${ts.length?ts.map(k=>`<div class="card item ${k.done?'done':''}"><input type="checkbox" class="chk" ${k.done?'checked':''} data-act="taskdone" data-id="${k.id}"><div class="b"><div class="t">${k.rid?'🔁 ':''}${esc(k.title)}</div><div class="sub"><span class="tag ${!k.done&&k.date<t?'late':''}">${nice(k.date)}</span>${bn(k.time||'')}</div></div><button class="x" data-act="deltask" data-id="${k.id}">✕</button></div>`).join(''):'<div class="empty">কোনো task নেই</div>'}`}
+
+function vHist(){const t=today(),m={},g=d=>m[d]=m[d]||{it:[],lg:[]};
+ S.tasks.forEach(k=>{if(k.date<=t)g(k.date).it.push({n:k.title,done:k.done,ot:k.done&&(!k.doneAt||k.doneAt<=k.date)})});
+ revs().forEach(r=>{if(r.due<=t)g(r.due).it.push({n:'Revise ('+bn(r.gap)+' দিন): '+r.log.topic,done:r.done,ot:r.done&&(!r.at||r.at<=r.due)})});
+ S.logs.forEach(l=>g(l.date).lg.push(l.topic));
+ const ds=Object.keys(m).sort().reverse();
+ const st=a=>{const T=a.length,D=a.filter(x=>x.done).length,O=a.filter(x=>x.ot).length;return{T,D,p:T?Math.round(D/T*100):0,o:T?Math.round(O/T*100):0}};
+ const all=st(ds.flatMap(d=>m[d].it));
+ const wk=[...Array(7)].map((_,i)=>addDays(t,i-6));
+ const w7=st(wk.flatMap(d=>m[d]?m[d].it:[]));
+ const cols=wk.map(d=>{const x=st(m[d]?m[d].it:[]);return `<div><span style="height:${x.p*0.5+2}px"></span>${bn(d.slice(8))}</div>`}).join('');
+ return `<h1>History</h1><div class="sub">কতটুকু ঠিকভাবে করতে পেরেছি</div>
+ <h2>মোট</h2><div class="stats"><div class="card"><strong>${bn(all.p)}%</strong><span class="sub">সম্পন্ন (${bn(all.D)}/${bn(all.T)})</span></div><div class="card"><strong>${bn(all.o)}%</strong><span class="sub">সময়মতো</span></div><div class="card"><strong>${bn(w7.p)}%</strong><span class="sub">শেষ ৭ দিন</span></div></div>
+ <h2>শেষ ৭ দিন</h2><div class="card"><div class="cols">${cols}</div></div>
+ <h2>দিন অনুযায়ী</h2>${ds.length?ds.map(d=>{const x=st(m[d].it),e=m[d];return `<div class="card"><div class="item"><div class="b t">${nice(d)}${d===t?' (আজ)':''}</div><div class="t">${e.it.length?bn(x.p)+'%':'—'}</div></div>${e.it.length?`<div class="bar" style="margin:6px 0"><b style="width:${x.p}%"></b></div>`:''}${e.lg.length?`<div class="sub">পড়েছি: ${e.lg.map(esc).join(', ')}</div>`:''}${e.it.map(i=>`<div class="sub">${i.done?'✓':'○'} ${esc(i.n)}</div>`).join('')}</div>`}).join(''):'<div class="empty">এখনো history নেই</div>'}`}
+
+// ---------- Events ----------
+document.addEventListener('click',e=>{
+ const tb=e.target.closest('[data-tab]');if(tb){tab=tb.dataset.tab;render();return}
+ const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act,id=+el.dataset.id;
+ if(a==='perm')askPerm();
+ else if(a==='addlog'){const v=$('#topic').value.trim();if(!v)return;S.logs.push({id:S.n++,topic:v,note:$('#note').value.trim(),date:today(),done:[]});save()}
+ else if(a==='dellog'){S.logs=S.logs.filter(l=>l.id!==id);save()}
+ else if(a==='saveplan'){S.plans[addDays(today(),1)]=$('#plan').value.trim();save();toast('Save হয়েছে')}
+ else if(a==='revdone'){const l=S.logs.find(l=>l.id===id);if(addDays(l.date,REV_GAPS[+el.dataset.i])>today()){render();return}l.done=l.done||[];l.done[+el.dataset.i]=true;l.doneAt=l.doneAt||[];l.doneAt[+el.dataset.i]=today();save()}
+ else if(a==='qadd'){const v=$('#qtask').value.trim();if(!v)return;S.tasks.push({id:S.n++,title:v,date:today(),time:'',done:false});save()}
+ else if(a==='addrep'){const v=$('#rtitle').value.trim(),dy=[...document.querySelectorAll('.rd:checked')].map(x=>+x.value);if(!v||!dy.length)return;S.rep.push({id:S.n++,title:v,time:$('#rtime').value||'',days:dy,start:today(),last:null});genRep();save()}
+ else if(a==='delrep'){S.rep=S.rep.filter(r=>r.id!==id);S.tasks=S.tasks.filter(k=>!(k.rid===id&&!k.done&&k.date>=today()));save()}
+ else if(a==='addtask'){const v=$('#ttitle').value.trim();if(!v)return;S.tasks.push({id:S.n++,title:v,date:$('#tdate').value||today(),time:$('#ttime').value||'',done:false});save()}
+ else if(a==='taskdone'){const k=S.tasks.find(k=>k.id===id);k.done=!k.done;k.doneAt=k.done?today():null;save()}
+ else if(a==='deltask'){S.tasks=S.tasks.filter(k=>k.id!==id);save()}
+});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){genRep();save()}});
+genRep();save();tick();
+</script>
+</body>
+</html>
